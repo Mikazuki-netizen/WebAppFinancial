@@ -11,8 +11,10 @@ import {
   CreditCard,
   Film,
   Gift,
+  Heart,
   HeartPulse,
   Home,
+  MoreHorizontal,
   PiggyBank,
   Receipt,
   Search,
@@ -32,9 +34,19 @@ import { Transaction, TransactionType } from '../../types/finance';
 import { formatDateIndo, formatRupiah } from '../../utils/financeCalculators';
 
 export const TransactionsList: React.FC = () => {
-  const { filteredTransactions, deleteTransaction, users, pushToGoogleSheets, isSyncing, syncConfig } = useFinance();
+  const {
+    filteredTransactions,
+    monthTransactions,
+    deleteTransaction,
+    users,
+    pushToGoogleSheets,
+    isSyncing,
+    syncConfig,
+    selectedMonthName,
+  } = useFinance();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
+  const [viewScope, setViewScope] = useState<'month' | 'all'>('month');
 
   const getCategoryIcon = (category: string, type: TransactionType) => {
     switch (category) {
@@ -58,6 +70,10 @@ export const TransactionsList: React.FC = () => {
       case 'Reksadana':
       case 'Tabungan Emas':
         return <PiggyBank className="w-4 h-4 text-pink-500" />;
+      case 'Infaq / Amal':
+        return <Heart className="w-4 h-4 text-emerald-500" />;
+      case 'Lain-lain':
+        return <MoreHorizontal className="w-4 h-4 text-slate-500" />;
       default:
         return type === 'income' ? (
           <ArrowUpRight className="w-4 h-4 text-emerald-500" />
@@ -67,15 +83,17 @@ export const TransactionsList: React.FC = () => {
     }
   };
 
+  const baseList = viewScope === 'month' ? monthTransactions : filteredTransactions;
+
   const filtered = useMemo(() => {
-    return filteredTransactions.filter(t => {
+    return baseList.filter(t => {
       const matchSearch =
         t.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
         t.category.toLowerCase().includes(searchQuery.toLowerCase());
       const matchType = filterType === 'all' || t.type === filterType;
       return matchSearch && matchType;
     });
-  }, [filteredTransactions, searchQuery, filterType]);
+  }, [baseList, searchQuery, filterType]);
 
   // Group by Date String
   const groupedByDate = useMemo(() => {
@@ -107,6 +125,38 @@ export const TransactionsList: React.FC = () => {
             onChange={e => setSearchQuery(e.target.value)}
             className="w-full glass-input pl-10 text-xs"
           />
+        </div>
+
+        {/* Scope Toggle: Bulan Ini vs Semua Riwayat */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1 p-1 rounded-xl bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 text-xs">
+            <button
+              type="button"
+              onClick={() => setViewScope('month')}
+              className={`px-2.5 py-1 rounded-lg font-semibold transition-all text-[11px] ${
+                viewScope === 'month'
+                  ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              {selectedMonthName}
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewScope('all')}
+              className={`px-2.5 py-1 rounded-lg font-semibold transition-all text-[11px] ${
+                viewScope === 'all'
+                  ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              Semua Riwayat
+            </button>
+          </div>
+
+          <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">
+            {filtered.length} transaksi
+          </span>
         </div>
 
         {/* Filter Pills & Manual Sync */}

@@ -10,7 +10,14 @@ import {
   UserProfile,
 } from '../types/finance';
 import { DataService, DEFAULT_USERS } from '../services/dataService';
-import { calculateFinancialHealth } from '../utils/financeCalculators';
+import {
+  calculateFinancialHealth,
+  formatMonthYearIndo,
+  getCurrentYearMonth,
+  getMonthDateRangeIndo,
+  isDateInMonth,
+  shiftYearMonth,
+} from '../utils/financeCalculators';
 import { triggerHaptic } from '../utils/haptics';
 
 interface FinanceContextType {
@@ -20,6 +27,16 @@ interface FinanceContextType {
   setActiveProfile: (profile: ActiveProfile) => void;
   currentUser: UserProfile | null;
 
+  // Selected Month / Range Filter
+  selectedMonth: string;
+  setSelectedMonth: (month: string) => void;
+  selectedMonthName: string;
+  selectedMonthRange: string;
+  isCurrentMonth: boolean;
+  goToPreviousMonth: () => void;
+  goToNextMonth: () => void;
+  goToCurrentMonth: () => void;
+
   // Data Collections
   transactions: Transaction[];
   fixedBudgets: FixedBudget[];
@@ -27,6 +44,7 @@ interface FinanceContextType {
 
   // Filtered Collections for Current View
   filteredTransactions: Transaction[];
+  monthTransactions: Transaction[];
   filteredFixedBudgets: FixedBudget[];
   filteredInvestments: Investment[];
 
@@ -34,6 +52,7 @@ interface FinanceContextType {
   totalIncome: number;
   salaryIncome: number;
   variableIncome: number;
+  additionalIncome: number;
   depositoYieldTotal: number;
   totalFixedExpenses: number;
   totalDailyExpenses: number;
@@ -142,6 +161,33 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return users.find(u => u.id === activeProfile) || users[0] || null;
   }, [activeProfile, users]);
 
+  // Selected month filter (default: current calendar month, e.g. "2026-10")
+  const [selectedMonth, setSelectedMonthState] = useState<string>(() => getCurrentYearMonth());
+
+  const setSelectedMonth = (month: string) => {
+    triggerHaptic('light');
+    setSelectedMonthState(month);
+  };
+
+  const goToPreviousMonth = () => {
+    triggerHaptic('light');
+    setSelectedMonthState(prev => shiftYearMonth(prev, -1));
+  };
+
+  const goToNextMonth = () => {
+    triggerHaptic('light');
+    setSelectedMonthState(prev => shiftYearMonth(prev, 1));
+  };
+
+  const goToCurrentMonth = () => {
+    triggerHaptic('light');
+    setSelectedMonthState(getCurrentYearMonth());
+  };
+
+  const isCurrentMonth = selectedMonth === getCurrentYearMonth();
+  const selectedMonthName = useMemo(() => formatMonthYearIndo(selectedMonth), [selectedMonth]);
+  const selectedMonthRange = useMemo(() => getMonthDateRangeIndo(selectedMonth), [selectedMonth]);
+
   // Filtered collections based on active profile and Deposito Sync Mode
   const filteredTransactions = useMemo(() => {
     let list = transactions;
@@ -155,6 +201,14 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return list;
   }, [activeProfile, transactions, isDepositoSyncEnabled]);
 
+  // Transactions belonging specifically to the selected month's date range
+  const monthTransactions = useMemo(() => {
+    return filteredTransactions.filter(t => {
+      if (!t.timestamp) return false;
+      return isDateInMonth(t.timestamp, selectedMonth);
+    });
+  }, [filteredTransactions, selectedMonth]);
+
   const filteredFixedBudgets = useMemo(() => {
     if (activeProfile === 'household') return fixedBudgets;
     return fixedBudgets.filter(b => b.userId === activeProfile || b.userId === 'shared');
@@ -165,11 +219,12 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return investments.filter(i => i.userId === activeProfile || i.userId === 'shared');
   }, [activeProfile, investments]);
 
-  // Financial Metrics Computation — 100% Referenced directly to live Spreadsheet & Transaction records
+  // Financial Metrics Computation — Base Salary preserved + Additional Incomes accumulated by date range
   const {
     totalIncome,
     salaryIncome,
     variableIncome,
+    additionalIncome,
     depositoYieldTotal,
     totalFixedExpenses,
     totalDailyExpenses,
@@ -179,7 +234,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     savingsProgressPercent,
     liquidAssetsEstimate,
   } = useMemo(() => {
-    // Determine Base Salaries from Users table
+    // 1. Determine Base Salaries from Users table (baseline income for the month)
     let baseSalary = 0;
     let target = 0;
 
@@ -192,48 +247,57 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       target = u ? Number(u.targetSavings) || 0 : 0;
     }
 
-    // Deposito / Investment Yield from active portfolio
+    // 2. Deposito / Investment Yield from active portfolio
     // ONLY included if isDepositoSyncEnabled is TRUE!
     const activeInvs = isDepositoSyncEnabled
       ? filteredInvestments.filter(i => i.isActive && i.injectedToIncome)
       : [];
     const depYield = activeInvs.reduce((sum, i) => sum + (Number(i.netMonthlyYield) || 0), 0);
 
-    // Sum ALL income records directly from filteredTransactions
-    const allIncomeTxs = filteredTransactions.filter(t => t.type === 'income');
-    const incomeFromTransactions = allIncomeTxs.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-
-    // If transactions tab has income records, that is the live source of truth from spreadsheet!
-    // Otherwise fallback to user's baseSalary + depYield (if sync is enabled)
-    const totIncome = allIncomeTxs.length > 0 ? incomeFromTransactions : (baseSalary + depYield);
-
-    // Specific breakdown
-    const salaryTxs = allIncomeTxs.filter(t => t.category === 'Gaji Pokok');
-    const salaryInc = salaryTxs.length > 0 
-      ? salaryTxs.reduce((sum, t) => sum + (Number(t.amount) || 0), 0)
-      : baseSalary;
-
     const passiveTxs = isDepositoSyncEnabled
-      ? allIncomeTxs.filter(t => t.isPassiveIncome || t.category === 'Passive Income')
+      ? monthTransactions.filter(t => t.type === 'income' && (t.isPassiveIncome || t.category === 'Passive Income'))
       : [];
     const depYieldFinal = isDepositoSyncEnabled
       ? (passiveTxs.length > 0 ? passiveTxs.reduce((sum, t) => sum + (Number(t.amount) || 0), 0) : depYield)
       : 0;
 
-    const variableInc = allIncomeTxs
-      .filter(t => t.category !== 'Gaji Pokok' && !t.isPassiveIncome && t.category !== 'Passive Income')
+    // 3. Additional Income transactions for this month (excluding passive yield)
+    const additionalIncomeTxs = monthTransactions.filter(
+      t => t.type === 'income' && !t.isPassiveIncome && t.category !== 'Passive Income'
+    );
+    const additionalIncomeTotal = additionalIncomeTxs.reduce(
+      (sum, t) => sum + (Number(t.amount) || 0),
+      0
+    );
+
+    // CRITICAL: Base monthly salary is ALWAYS maintained and NEVER wiped out!
+    // Any income transactions inputted within this month's date range are ADDED to the base income!
+    const totIncome = baseSalary + depYieldFinal + additionalIncomeTotal;
+
+    // Specific breakdown
+    const salaryTxs = additionalIncomeTxs.filter(t => t.category === 'Gaji Pokok');
+    const extraSalary = salaryTxs.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    const salaryInc = baseSalary + extraSalary;
+
+    const variableInc = additionalIncomeTxs
+      .filter(t => t.category !== 'Gaji Pokok')
       .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
-    // Fixed Expenses: from FixedBudgets list (sum of all monthly fixed obligations)
-    const totFixed = filteredFixedBudgets.reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
+    // 4. Fixed Expenses: from FixedBudgets list (monthly obligations) or fixed_expense transactions in this month
+    const fixedTxTotal = monthTransactions
+      .filter(t => t.type === 'fixed_expense')
+      .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    const totFixed = filteredFixedBudgets.length > 0
+      ? filteredFixedBudgets.reduce((sum, b) => sum + (Number(b.amount) || 0), 0)
+      : fixedTxTotal;
 
-    // Daily Expenses: from transactions tagged daily_expense
-    const totDaily = filteredTransactions
+    // 5. Daily Expenses: from transactions tagged daily_expense in this month
+    const totDaily = monthTransactions
       .filter(t => t.type === 'daily_expense')
       .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
-    // Savings: from transactions tagged savings
-    const totSavings = filteredTransactions
+    // 6. Savings: from transactions tagged savings in this month
+    const totSavings = monthTransactions
       .filter(t => t.type === 'savings')
       .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
@@ -250,6 +314,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       totalIncome: totIncome,
       salaryIncome: salaryInc,
       variableIncome: variableInc,
+      additionalIncome: additionalIncomeTotal,
       depositoYieldTotal: depYieldFinal,
       totalFixedExpenses: totFixed,
       totalDailyExpenses: totDaily,
@@ -259,7 +324,14 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       savingsProgressPercent: progress,
       liquidAssetsEstimate: liquid,
     };
-  }, [activeProfile, users, filteredInvestments, filteredTransactions, filteredFixedBudgets, isDepositoSyncEnabled]);
+  }, [
+    activeProfile,
+    users,
+    filteredInvestments,
+    monthTransactions,
+    filteredFixedBudgets,
+    isDepositoSyncEnabled,
+  ]);
 
   // Financial Health Computation
   const financialHealth = useMemo(() => {
@@ -509,15 +581,25 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         activeProfile,
         setActiveProfile,
         currentUser,
+        selectedMonth,
+        setSelectedMonth,
+        selectedMonthName,
+        selectedMonthRange,
+        isCurrentMonth,
+        goToPreviousMonth,
+        goToNextMonth,
+        goToCurrentMonth,
         transactions,
         fixedBudgets,
         investments,
         filteredTransactions,
+        monthTransactions,
         filteredFixedBudgets,
         filteredInvestments,
         totalIncome,
         salaryIncome,
         variableIncome,
+        additionalIncome,
         depositoYieldTotal,
         totalFixedExpenses,
         totalDailyExpenses,

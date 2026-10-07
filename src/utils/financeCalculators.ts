@@ -43,6 +43,88 @@ export function formatDateIndo(dateStr: string): string {
 }
 
 /**
+ * Returns current local year and month string format YYYY-MM (e.g. "2026-10")
+ */
+export function getCurrentYearMonth(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
+}
+
+/**
+ * Extracts YYYY-MM from an ISO date or date string
+ */
+export function getYearMonthFromDate(dateStr: string): string {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      return `${year}-${month}`;
+    }
+  } catch {
+    // fallback
+  }
+  return dateStr.slice(0, 7);
+}
+
+/**
+ * Formats YYYY-MM to Indonesian string (e.g. "Oktober 2026")
+ */
+export function formatMonthYearIndo(yearMonthStr: string): string {
+  if (!yearMonthStr) return '';
+  const [yearStr, monthStr] = yearMonthStr.split('-');
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  if (isNaN(year) || isNaN(month) || month < 1 || month > 12) return yearMonthStr;
+
+  const d = new Date(year, month - 1, 1);
+  return new Intl.DateTimeFormat('id-ID', {
+    month: 'long',
+    year: 'numeric',
+  }).format(d);
+}
+
+/**
+ * Formats date range for month (e.g. "1 Okt 2026 - 31 Okt 2026")
+ */
+export function getMonthDateRangeIndo(yearMonthStr: string): string {
+  if (!yearMonthStr) return '';
+  const [yearStr, monthStr] = yearMonthStr.split('-');
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  if (isNaN(year) || isNaN(month) || month < 1 || month > 12) return '';
+
+  const lastDay = new Date(year, month, 0).getDate();
+  const monthShort = new Intl.DateTimeFormat('id-ID', { month: 'short' }).format(new Date(year, month - 1, 1));
+  return `1 ${monthShort} ${year} - ${lastDay} ${monthShort} ${year}`;
+}
+
+/**
+ * Checks whether a date string falls inside the given YYYY-MM month
+ */
+export function isDateInMonth(dateStr: string, yearMonthStr: string): boolean {
+  if (!dateStr || !yearMonthStr) return false;
+  if (dateStr.startsWith(yearMonthStr)) return true;
+  return getYearMonthFromDate(dateStr) === yearMonthStr;
+}
+
+/**
+ * Shifts year-month string forward or backward by a number of months
+ */
+export function shiftYearMonth(yearMonthStr: string, deltaMonths: number): string {
+  const [yearStr, monthStr] = yearMonthStr.split('-');
+  const year = Number(yearStr) || new Date().getFullYear();
+  const month = Number(monthStr) || new Date().getMonth() + 1;
+  const target = new Date(year, month - 1 + deltaMonths, 1);
+  const targetYear = target.getFullYear();
+  const targetMonth = String(target.getMonth() + 1).padStart(2, '0');
+  return `${targetYear}-${targetMonth}`;
+}
+
+/**
  * Bank Deposito & Compound Interest Calculator
  * Standard Indonesian bank formula:
  * - Deposito placement > Rp 7.500.000 has 20% PPh Final tax on interest.

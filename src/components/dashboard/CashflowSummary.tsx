@@ -3,7 +3,10 @@ import { motion } from 'framer-motion';
 import {
   ArrowDownRight,
   ArrowUpRight,
+  Calendar,
   CalendarCheck,
+  ChevronLeft,
+  ChevronRight,
   Coins,
   Percent,
   PiggyBank,
@@ -23,6 +26,7 @@ export const CashflowSummary: React.FC = () => {
     totalIncome,
     salaryIncome,
     variableIncome,
+    additionalIncome,
     depositoYieldTotal,
     totalFixedExpenses,
     totalDailyExpenses,
@@ -31,6 +35,12 @@ export const CashflowSummary: React.FC = () => {
     savingsTarget,
     savingsProgressPercent,
     activeProfile,
+    selectedMonthName,
+    selectedMonthRange,
+    isCurrentMonth,
+    goToPreviousMonth,
+    goToNextMonth,
+    goToCurrentMonth,
   } = useFinance();
 
   const handleCelebrate = () => {
@@ -45,6 +55,57 @@ export const CashflowSummary: React.FC = () => {
 
   return (
     <div className="space-y-3.5">
+      {/* Month & Period Selector Bar */}
+      <div className="flex items-center justify-between p-2.5 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-black/5 dark:border-white/10 backdrop-blur-xl shadow-sm">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="p-2 rounded-xl bg-blue-500/15 text-blue-600 dark:text-blue-400 flex-shrink-0">
+            <Calendar className="w-4 h-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-900 dark:text-white capitalize truncate">
+                {selectedMonthName}
+              </span>
+              {isCurrentMonth ? (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold flex-shrink-0">
+                  Bulan Ini
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={goToCurrentMonth}
+                  className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400 font-semibold hover:bg-blue-500/25 transition-all flex-shrink-0"
+                >
+                  Kembali ke Bulan Ini
+                </button>
+              )}
+            </div>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate">
+              Periode: {selectedMonthRange}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <button
+            type="button"
+            onClick={goToPreviousMonth}
+            title="Bulan Sebelumnya"
+            className="p-1.5 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 transition-colors"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={goToNextMonth}
+            title="Bulan Berikutnya"
+            className="p-1.5 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 transition-colors"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
       {/* Primary Balance / Net Cashflow Hero Card */}
       <GlassCard variant="glow-blue" className="bg-gradient-to-br from-blue-600/10 via-indigo-600/5 to-purple-600/10">
         <div className="flex items-center justify-between">
@@ -88,6 +149,12 @@ export const CashflowSummary: React.FC = () => {
               <span className="text-[10px] text-slate-400 dark:text-slate-500">
                 Gaji: {formatRupiah(salaryIncome, true)}
               </span>
+              {variableIncome > 0 && (
+                <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
+                  <TrendingUp className="w-2.5 h-2.5" />
+                  Ekstra: +{formatRupiah(variableIncome, true)}
+                </span>
+              )}
               {depositoYieldTotal > 0 && (
                 <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-0.5">
                   <Coins className="w-2.5 h-2.5" />

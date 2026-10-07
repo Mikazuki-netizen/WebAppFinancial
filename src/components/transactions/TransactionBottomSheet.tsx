@@ -7,8 +7,10 @@ import {
   CreditCard,
   Film,
   Gift,
+  Heart,
   HeartPulse,
   Home,
+  MoreHorizontal,
   PiggyBank,
   Plus,
   ShoppingBag,
@@ -21,7 +23,7 @@ import { GlassModal } from '../common/GlassModal';
 import { GlassButton } from '../common/GlassButton';
 import { useFinance } from '../../context/FinanceContext';
 import { TransactionType, UserId } from '../../types/finance';
-import { formatRupiah } from '../../utils/financeCalculators';
+import { formatMonthYearIndo, formatRupiah } from '../../utils/financeCalculators';
 import { triggerHaptic } from '../../utils/haptics';
 
 interface TransactionBottomSheetProps {
@@ -38,13 +40,16 @@ export const TransactionBottomSheet: React.FC<TransactionBottomSheetProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { addTransaction, users, activeProfile } = useFinance();
+  const { addTransaction, users, activeProfile, selectedMonth } = useFinance();
 
   const [type, setType] = useState<TransactionType>('daily_expense');
   const [amount, setAmount] = useState<string>('');
   const [category, setCategory] = useState<string>('Makanan & Kuliner');
   const [description, setDescription] = useState<string>('');
-  const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState<string>(() => {
+    const today = new Date().toISOString().split('T')[0];
+    return today;
+  });
   const [assignedUser, setAssignedUser] = useState<UserId>(
     activeProfile === 'user_2' ? 'user_2' : 'user_1'
   );
@@ -57,6 +62,8 @@ export const TransactionBottomSheet: React.FC<TransactionBottomSheetProps> = ({
       { name: 'Transport & Bensin', icon: <Car className="w-4 h-4" /> },
       { name: 'Hiburan & Nonton', icon: <Film className="w-4 h-4" /> },
       { name: 'Kesehatan & Obat', icon: <HeartPulse className="w-4 h-4" /> },
+      { name: 'Infaq / Amal', icon: <Heart className="w-4 h-4 text-emerald-500" /> },
+      { name: 'Lain-lain', icon: <MoreHorizontal className="w-4 h-4" /> },
     ],
     income: [
       { name: 'Gaji Pokok', icon: <Wallet className="w-4 h-4" /> },
@@ -105,13 +112,19 @@ export const TransactionBottomSheet: React.FC<TransactionBottomSheetProps> = ({
     const parsedAmount = Number(amount.replace(/[^0-9]/g, ''));
     if (parsedAmount <= 0) return;
 
+    // Construct local timestamp to prevent timezone shifts across midnight
+    const [y, m, d] = date.split('-').map(Number);
+    const now = new Date();
+    const targetDate = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds());
+    const timestamp = targetDate.toISOString();
+
     addTransaction({
       userId: assignedUser,
       type,
       category,
       amount: parsedAmount,
       description: description.trim() || category,
-      timestamp: new Date(date).toISOString(),
+      timestamp,
     });
 
     // Reset & Close
@@ -328,6 +341,17 @@ export const TransactionBottomSheet: React.FC<TransactionBottomSheetProps> = ({
             />
           </div>
         </div>
+
+        {/* Income Destination Preview Callout */}
+        {type === 'income' && (
+          <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2.5">
+            <TrendingUp className="w-4 h-4 flex-shrink-0 text-emerald-500" />
+            <div className="leading-snug">
+              Pemasukan ini akan <strong>ditambahkan</strong> ke base pendapatan bulan{' '}
+              <strong>{formatMonthYearIndo(date.slice(0, 7))}</strong>.
+            </div>
+          </div>
+        )}
 
         {/* Submit Button */}
         <div className="pt-2">
